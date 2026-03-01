@@ -60,71 +60,6 @@ Probar cobertura/
 └── README.md                 # Este archivo
 ```
 
-### Componentes Principales
-
-<<<<<<< HEAD
-#### 1. `config.h` - Centro de Configuración
-Define pines y parámetros básicos del sistema (pines I2C/SPI, frecuencia LoRa, timeouts).
-
-#### 2. **LoRaManager** - Gestión de Comunicación LoRa
-- Inicializa LMIC y el radio
-- Envía paquetes de prueba y captura métricas (RSSI/SNR)
-=======
-#### 1. **config.h** - Centro de Configuración
-Define todos los parámetros del sistema:
-
-```cpp
-// Pines del T-Beam v1.2
-#define BUTTON_PIN 38            // Botón
-#define I2C_SDA 21, I2C_SCL 22   // Display OLED
-#define LORA_SCK 5, LORA_MISO 19, etc.  // SPI para LoRa
-
-// Nodos autorizados (filtro)
-#define AUTHORIZED_NODES { {0xCC, 0xFC, 0x06, 0xD0, 0x7E, 0xD5, 0xB3, 0x70} }
-#define AUTHORIZED_NODES_COUNT 1
-```
-
-#### 2. **LoRaManager** - Gestión de Comunicación LoRa
-- Inicializa el módulo SX1262 mediante LMIC
-- Transmite paquetes de prueba
-- Captura métricas de RSSI y SNR
-- Valida nodos autorizados mediante DevEUI
->>>>>>> origin/main
-
-```cpp
-class LoRaManager {
-    void startCoverageTest();      // Inicia prueba de cobertura
-    void update();                 // Actualiza estado LMIC
-    LoRaTestResults getResults();  // Obtiene RSSI, SNR, contador
-<<<<<<< HEAD
-=======
-    bool isNodeAuthorized();       // Valida DevEUI del nodo
->>>>>>> origin/main
-};
-```
-
-#### 3. **DisplayManager** - Interfaz Visual
-<<<<<<< HEAD
-- Splash, estado listo, prueba en curso y resultados
-
-#### 4. **main.cpp** - Máquina de Estados
-Orquesta el flujo del dispositivo:
-=======
-- Muestra splash screen al arrancar
-- Pantalla de espera de interacción
-- Indicador de prueba en progreso
-- Resultados con interpretación de calidad
-
-#### 4. **main.cpp** - Máquina de Estados
-Orquesta el flujo completo del dispositivo:
->>>>>>> origin/main
-
-```
-STATE_SPLASH (3s) → STATE_READY (espera botón) → STATE_TESTING (mide) → STATE_RESULTS (muestra datos)
-```
-
----
-
 ## Métricas de Cobertura
 
 ### RSSI (Indicador de Fuerza de Señal Recibida)
@@ -237,68 +172,6 @@ En [include/config.h](include/config.h), actualizar:
      - **Packets**: Contador de paquetes
      - **Calidad**: Interpretación visual
 
-4. **Nuevas Pruebas**
-   - Presionar botón nuevamente para repetir
->>>>>>> origin/main
-
-### Depuración Serial
-
-Abre la consola serial a 115200 baud:
-
-```
-==== LoRa Coverage Test - T-Beam ====
-
-Botón inicializado en GPIO 38
-Display OLED 0.96" inicializado correctamente
-Inicializando LMIC-Arduino...
-LMIC inicializado correctamente
-Frecuencia: 868 MHz (EU868)
-Spreading Factor: 12
-Sistema listo para pruebas de cobertura
-
-=== Iniciando prueba de cobertura LoRa ===
-<<<<<<< HEAD
-Paquete transmitido (confirmed), esperando ACK/downlink...
-=======
-Paquete transmitido, esperando resultado...
->>>>>>> origin/main
-
-=== Resultados de Cobertura ===
-RSSI: -95 dBm
-SNR: 7 dB
-Packets: 1
-```
-
----
-
-## Especificaciones Técnicas
-
-### Parámetros LoRa
-
-| Parámetro | Valor | Descripción |
-|-----------|-------|-------------|
-| Frecuencia | 868 MHz | Banda ISM Europa (EU868) |
-| Spreading Factor | 12 | SF máximo para máximo rango |
-| Transmit Power | 14 dBm | Potencia de transmisión |
-| Bandwidth | 125 kHz | Ancho de banda estándar |
-| Coding Rate | 4/5 | Tasa de codificación |
-| Canales | Solo canal 0 | Optimizado para pruebas |
-
-### Tiempos
-
-| Elemento | Tiempo |
-|----------|--------|
-| Splash Screen | 3 segundos |
-| Timeout de Prueba | 10 segundos |
-| Debounce Botón | 200 ms |
-| Refresco Display | Continuo |
-
-### Consumo de Potencia (Estimado)
-
-- Espera (display + CPU): ~50 mA
-- Transmisión LoRa: ~500 mA pico
-- Promedio en operación: ~100-150 mA
-
 ---
 
 ## Mapa Mental de la Comunicación
@@ -385,12 +258,8 @@ Este proyecto está disponible bajo licencia MIT. Ver LICENSE para detalles.
 ## Autor
 
 Proyecto desarrollado como herramienta de diagnóstico y validación de cobertura LoRa en redes locales.
-
-<<<<<<< HEAD
 =======
-**Última actualización**: 16 de febrero de 2026
-
->>>>>>> origin/main
+**Última actualización**: 16 de febrero 2026
 ---
 
 ## Contribuciones
