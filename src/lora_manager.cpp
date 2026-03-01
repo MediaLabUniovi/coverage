@@ -135,6 +135,7 @@ void LoRaManager::startCoverageTest() {
     lastRxReceived = false;
     LMIC_setTxData2(1, testData, sizeof(testData), 1); // confirmed = 1
     Serial.println("Paquete transmitido (confirmed), esperando ACK/downlink...");
+
 }
 
 void LoRaManager::update() {
