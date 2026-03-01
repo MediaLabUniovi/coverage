@@ -1,33 +1,9 @@
 
 # LoRa Coverage Meter - T-Beam v1.2
 
+
 Herramienta portátil para medir la cobertura LoRa con un LilyGO T-Beam v1.2.
-
 La medición de cobertura **solo se considera válida si el gateway responde con un ACK o un paquete de downlink** tras el envío del paquete confirmado. Si no hay respuesta, la medición se descarta.
-
-## Rápido resumen de uso
-
-- Compila con PlatformIO (`pio run -e lilygo-t-beam`).
-- Carga al T‑Beam (`pio run -e lilygo-t-beam -t upload`).
-- Pulsa el botón del T‑Beam para iniciar una prueba.
-- Observa resultados en el OLED y en el puerto serial (115200 baud).
-
-## Métricas de cobertura
-
-- RSSI: <-80 dBm excelente, <-100 dBm buena, <-120 dBm aceptable.
-- SNR: >10 dB excelente, 5 – 10 dB aceptable, <5 dB pobre.
-
-## Estructura
-
-```
-include/   configuraciones e interfaces
-src/       implementación (main, lora_manager, display)
-lib/       dependencia LMIC-Arduino
-platformio.ini
-README.md
-```
-
-Más detalles en el código fuente (especialmente `lora_manager.cpp`).
 
 ## Rápido resumen de uso
 
