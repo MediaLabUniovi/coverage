@@ -134,22 +134,6 @@ pio device monitor -e lilygo-t-beam -b 115200
 
 Presionar el botón para repetir la prueba.
 =======
-### 3. Configuración de Nodos Autorizados
-
-En [include/config.h](include/config.h), actualizar:
-
-```cpp
-#define AUTHORIZED_NODES {                              \
-    {0xCC, 0xFC, 0x06, 0xD0, 0x7E, 0xD5, 0xB3, 0x70}, \
-    {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11}, \
-    /* Agregar más DevEUI en formato little-endian */ \
-}
-#define AUTHORIZED_NODES_COUNT 2
-```
-
-**Nota**: Los DevEUI deben estar en formato **little-endian** (menos significativo primero). Si tu nodo usa `70 B3 D5 7E D0 06 FC CC`, invierte el orden en la configuración.
-
----
 
 ## Uso
 
