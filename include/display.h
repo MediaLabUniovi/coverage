@@ -14,7 +14,7 @@ public:
     void showSplash();
     void showReady();
     void showTesting();
-    void showResults(int rssi, float snr, int packetCount);
+    void showResults(int rssi, float snr, int packetCount,   bool fixValid, double lon, double lat,  const char* dateStr, const char* mac);
     void showError(const char* error);
     void clear();
     void display_update() { display.display(); }

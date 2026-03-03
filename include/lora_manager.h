@@ -6,14 +6,15 @@
 
 typedef struct {
     int rssi;
-    int snr;
+    float snr;
     int packetCount;
     bool testComplete;
     bool testRunning;
+    bool gotDownlink;
 } LoRaTestResults;
 
 class LoRaManager {
-private:
+public:
     LoRaTestResults testResults;
     bool isTestRunning;
     

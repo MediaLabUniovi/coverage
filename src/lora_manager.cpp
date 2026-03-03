@@ -15,16 +15,17 @@ const lmic_pinmap lmic_pins = {
 
 // LMIC callbacks (requeridos por la librería)
 void os_getArtEui(u1_t* buf) {
-    memset(buf, 0, 8);
+    memcpy_P(buf, APPEUI, 8);
 }
 
 void os_getDevEui(u1_t* buf) {
-    memset(buf, 0, 8);
+    memcpy_P(buf, DEVEUI, 8);
 }
 
 void os_getDevKey(u1_t* buf) {
-    memset(buf, 0, 16);
+    memcpy_P(buf, APPKEY, 16);
 }
+
 
 // Event handler para LMIC
 void onEvent(ev_t event) {
@@ -56,9 +57,39 @@ void onEvent(ev_t event) {
         case EV_REJOIN_FAILED:
             Serial.println("EV_REJOIN_FAILED");
             break;
-        case EV_TXCOMPLETE:
+        case EV_TXCOMPLETE: {
+             
             Serial.println("EV_TXCOMPLETE");
+             bool gotAck = (LMIC.txrxFlags & TXRX_ACK);
+    bool gotDl  = (LMIC.dataLen > 0);
+
+    loraManager.testResults.gotDownlink = gotAck || gotDl;
+
+    if (loraManager.testResults.gotDownlink) {
+
+           // ✅ 1) Ver el RSSI tal cual lo da LMIC (crudo)
+    Serial.print("LMIC.rssi raw = ");
+    Serial.println(LMIC.rssi);
+
+
+
+
+
+        loraManager.testResults.rssi = (int)LMIC.rssi-91;
+        loraManager.testResults.snr  = LMIC.snr / 4.0f;   // si snr es float
+        Serial.printf("ACK/DL OK -> RSSI=%d dBm SNR=%.2f dB\n",
+                      loraManager.testResults.rssi,
+                      loraManager.testResults.snr);
+    } else {
+        Serial.println("NO ACK / NO DOWNLINK");
+    }
+
+    loraManager.testResults.packetCount++;
+    loraManager.testResults.testComplete = true;
+    loraManager.testResults.testRunning  = false;
+    loraManager.isTestRunning = false;
             break;
+}
         case EV_LOST_TSYNC:
             Serial.println("EV_LOST_TSYNC");
             break;
@@ -83,7 +114,7 @@ void onEvent(ev_t event) {
 
 // Constructor
 LoRaManager::LoRaManager() : isTestRunning(false) {
-    testResults = {0, 0, 0, false, false};
+    testResults = {0, 0.0f, 0, false, false, false};
 }
 
 bool LoRaManager::init() {
@@ -97,14 +128,17 @@ bool LoRaManager::init() {
     
     // Reset LMIC
     LMIC_reset();
+    LMIC_setClockError(MAX_CLOCK_ERROR * 1 / 100); // 1% (ESP32)
+LMIC.dn2Dr = DR_SF9;                           // RX2 típico TTN EU868
+
     
     // Set data rate y transmit power para coverage test
     LMIC_setDrTxpow(DR_SF12, 14);
     
     // Desactivar todos los canales excepto el 0
-    for (int channel = 1; channel < 72; ++channel) {
-        LMIC_disableChannel(channel);
-    }
+   // for (int channel = 1; channel < 72; ++channel) {
+     //   LMIC_disableChannel(channel);
+    //}
     
     // Desactivar link check
     LMIC_setLinkCheckMode(0);
@@ -113,6 +147,8 @@ bool LoRaManager::init() {
     Serial.println("Frecuencia: 868 MHz (EU868)");
     Serial.println("Spreading Factor: 12");
     
+    LMIC_startJoining();
+
     return true;
 }
 
@@ -128,7 +164,7 @@ void LoRaManager::startCoverageTest() {
     uint8_t testData[] = "TEST";
     
     // Establecer transmisión sin confirmación
-    LMIC_setTxData2(1, testData, sizeof(testData), 0);
+    LMIC_setTxData2(1, testData, sizeof(testData)-1, 1);
     Serial.println("Paquete transmitido, esperando resultado...");
 }
 
@@ -136,27 +172,7 @@ void LoRaManager::update() {
     // Ejecutar LMIC
     os_runloop_once();
     
-    if (!isTestRunning) return;
-    
-    // Verificar si la transmisión está completa
-    if (!(LMIC.opmode & OP_TXRXPEND)) {
-        // Transmisión completada
-        testResults.rssi = LMIC.rssi;
-        testResults.snr = LMIC.snr / 4;  // Convertir a dB
-        testResults.packetCount++;
-        testResults.testComplete = true;
-        isTestRunning = false;
-        
-        Serial.println("\n=== Resultados de Cobertura ===");
-        Serial.print("RSSI: ");
-        Serial.print(testResults.rssi);
-        Serial.println(" dBm");
-        Serial.print("SNR: ");
-        Serial.print(testResults.snr);
-        Serial.println(" dB");
-        Serial.print("Packets: ");
-        Serial.println(testResults.packetCount);
-    }
+   
 }
 
 void LoRaManager::resetTest() {

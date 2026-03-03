@@ -62,12 +62,25 @@ void DisplayManager::showTesting() {
     display.display();
 }
 
-void DisplayManager::showResults(int rssi, float snr, int packetCount) {
+void DisplayManager::showResults(int rssi, float snr, int packetCount,  bool fixValid, double lon, double lat, const char* dateStr, const char* mac) {
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(0, 0);
-    display.println("=== Test Results ===");
-    display.println();
+    display.println("=Test Results+GPS=");
+    
+    // ORDEN pedido: LON, LAT, TS, RSSI, SNR
+    display.print("LON: ");
+    if (fixValid) display.println(lon, 6);
+    else display.println("NO FIX");
+
+    display.print("LAT: ");
+    if (fixValid) display.println(lat, 6);
+    else display.println("NO FIX");
+
+display.print("T:");
+    
+display.println(dateStr);
+
     
     // RSSI
     display.print("RSSI: ");
@@ -78,6 +91,10 @@ void DisplayManager::showResults(int rssi, float snr, int packetCount) {
     display.print("SNR: ");
     display.print(snr, 1);
     display.println(" dB");
+
+         // SNR
+    display.print("MAC:");
+    display.println(mac);
     
     // Packet Count
     display.print("Packets: ");

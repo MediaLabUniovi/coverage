@@ -1,6 +1,14 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <lmic.h>
+
+
+
+#define UP_HOST "medialab-uniovi.es"
+#define UP_PORT 443
+#define UP_PATH "/bike_signal/upload.php"
+
 // T-Beam GPIO Configuration (from utilities.h)
 #define BUTTON_PIN 38            // Botón incorporado del T-Beam
 #define I2C_SDA 21               // SDA para I2C
@@ -26,11 +34,26 @@
 #define LORA_FREQ 868E6          // 868 MHz para Europa
 #define USE_EU868
 
-// TTN Keys (usar valores dummy para prueba simple)
-#define APPEUI_DUMMY { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-#define DEVEUI_DUMMY { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
-#define APPKEY_DUMMY { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }
+#define GPS_RX   34
+#define GPS_TX   12
+#define GPS_BAUD 9600
 
+
+    // Application EUI (AppEUI) - 8 bytes en formato LSB
+    static const u1_t PROGMEM APPEUI[8] = {
+        0x00, 0x00, 0x00, 0x00,  // TODO: Reemplaza con valores reales
+        0x00, 0x00, 0x00, 0x00
+    };
+    
+    // Device EUI (DevEUI) - 8 bytes en formato LSB
+    static const u1_t PROGMEM DEVEUI[8] = {
+       0x48, 0x5D, 0x07, 0xD0, 0x7E, 0xD5, 0xB3, 0x70
+    };
+    
+    // Application Key (AppKey) - 16 bytes en formato MSB
+    static const u1_t PROGMEM APPKEY[16] = {
+    0x0A, 0x6C, 0x1D, 0x3A, 0xC3, 0xF1, 0xEC, 0x8B, 0x44, 0xA2, 0x56, 0x93, 0xFF, 0x03, 0xEF, 0xFD
+    };
 // Test Parameters
 #define TEST_TIMEOUT 10000       // Timeout en ms
 
