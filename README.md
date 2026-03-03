@@ -1,211 +1,36 @@
+
 # LoRa Coverage Meter - T-Beam v1.2
 
-## Descripción General
 
-**LoRa Coverage Meter** es un medidor de cobertura LoRa portable basado en el dispositivo **LilyGO T-Beam v1.2**. Este proyecto permite evaluar y monitorear la calidad de la señal LoRa en diferentes ubicaciones geográficas mediante métricas clave como RSSI (Indicador de Fuerza de Señal Recibida) y SNR (Relación Señal-Ruido).
+Herramienta portátil para medir la cobertura LoRa con un LilyGO T-Beam v1.2.
+La medición de cobertura **solo se considera válida si el gateway responde con un ACK o un paquete de downlink** tras el envío del paquete confirmado. Si no hay respuesta, la medición se descarta.
 
-El dispositivo actúa como una **sonda de monitoreo** que mide la cobertura LoRa disponible en un área específica, ideal para:
-- Mapeo de cobertura de redes LoRaWAN
-- Validación de ubicaciones para desplegar nodos LoRa
-- Diagnóstico de problemas de conectividad
-- Optimización de colocación de gateways
+## Rápido resumen de uso
 
----
+- Compila con PlatformIO (`pio run -e lilygo-t-beam`).
+- Carga al T‑Beam (`pio run -e lilygo-t-beam -t upload`).
+- Pulsa el botón del T‑Beam para iniciar una prueba.
+- Observa resultados en el OLED y en el puerto serial (115200 baud).
 
-## Características Principales
+## Métricas de cobertura
 
-### Hardware
-- **Procesador**: ESP32 (LilyGO T-Beam v1.2)
-- **Módulo LoRa**: SX1262 (frecuencia 868 MHz para Europa)
-- **Display**: OLED 0.96" (128x64 píxeles)
-- **Botón**: Integrado en el T-Beam para iniciar pruebas
-- **GPS**: Disponible en el T-Beam para geolocalización (extensible)
+- RSSI: <-80 dBm excelente, <-100 dBm buena, <-120 dBm aceptable.
+- SNR: >10 dB excelente, 5 – 10 dB aceptable, <5 dB pobre.
 
-### Software
-- **Framework**: Arduino + PlatformIO
-- **Librería LoRa**: LMIC-Arduino (LoRaMac-in-C)
-- **Librería Display**: Adafruit SSD1306 + GFX
-- **Formato**: Configuración por #define para fácil personalización
-
-### Funcionalidades
-- Pruebas de cobertura LoRa con un botón
-- Visualización en tiempo real de métricas en display OLED
-- Medición de RSSI (Received Signal Strength Indicator)
-- Cálculo de SNR (Signal-to-Noise Ratio)
-- Evaluación de calidad de señal (Excelente/Buena/Aceptable/Pobre)
-- Filtro de nodos autorizados por DevEUI
-- Salida por puerto serial para depuración
-- Máquina de estados para gestión del flujo de pruebas
-
----
-
-## Arquitectura del Proyecto
-
-### Estructura de Carpetas
+## Estructura
 
 ```
-Probar cobertura/
-├── include/
-│   ├── config.h              # Configuración centralizada (GPIO, LoRa, nodos)
-│   ├── display.h             # Interfaz DisplayManager
-│   └── lora_manager.h        # Interfaz LoRaManager
-├── lib/
-│   └── LMIC-Arduino/         # Librería LoRaMac-in-C
-├── src/
-│   ├── main.cpp              # Máquina de estados principal
-│   ├── display.cpp           # Implementación del display
-│   ├── lora_manager.cpp      # Gestión de LoRa y pruebas
-│   └── ...
-├── platformio.ini            # Configuración de build
-└── README.md                 # Este archivo
+include/   configuraciones e interfaces
+src/       implementación (main, lora_manager, display)
+lib/       dependencia LMIC-Arduino
+platformio.ini
+README.md
 ```
 
-### Componentes Principales
+Más detalles en el código fuente (especialmente `lora_manager.cpp`).
+4. Si la prueba se confirma, se muestran RSSI, SNR y el contador de paquetes; de lo contrario la medición no se contabiliza.
 
-#### 1. **config.h** - Centro de Configuración
-Define todos los parámetros del sistema:
-
-```cpp
-// Pines del T-Beam v1.2
-#define BUTTON_PIN 38            // Botón
-#define I2C_SDA 21, I2C_SCL 22   // Display OLED
-#define LORA_SCK 5, LORA_MISO 19, etc.  // SPI para LoRa
-
-// Nodos autorizados (filtro)
-#define AUTHORIZED_NODES { {0xCC, 0xFC, 0x06, 0xD0, 0x7E, 0xD5, 0xB3, 0x70} }
-#define AUTHORIZED_NODES_COUNT 1
-```
-
-#### 2. **LoRaManager** - Gestión de Comunicación LoRa
-- Inicializa el módulo SX1262 mediante LMIC
-- Transmite paquetes de prueba
-- Captura métricas de RSSI y SNR
-- Valida nodos autorizados mediante DevEUI
-
-```cpp
-class LoRaManager {
-    void startCoverageTest();      // Inicia prueba de cobertura
-    void update();                 // Actualiza estado LMIC
-    LoRaTestResults getResults();  // Obtiene RSSI, SNR, contador
-    bool isNodeAuthorized();       // Valida DevEUI del nodo
-};
-```
-
-#### 3. **DisplayManager** - Interfaz Visual
-- Muestra splash screen al arrancar
-- Pantalla de espera de interacción
-- Indicador de prueba en progreso
-- Resultados con interpretación de calidad
-
-#### 4. **main.cpp** - Máquina de Estados
-Orquesta el flujo completo del dispositivo:
-
-```
-STATE_SPLASH (3s) → STATE_READY (espera botón) → STATE_TESTING (mide) → STATE_RESULTS (muestra datos)
-```
-
----
-
-## Métricas de Cobertura
-
-### RSSI (Indicador de Fuerza de Señal Recibida)
-Mide la potencia recibida en dBm. Valores típicos:
-- **-30 a -50 dBm**: Señal excelente
-- **-50 a -80 dBm**: Buena señal
-- **-80 a -100 dBm**: Señal aceptable
-- **< -100 dBm**: Señal débil/pobre
-
-**Interpretación en el proyecto:**
-```
-> -80 dBm   → Excelente
-> -100 dBm  → Buena
-> -120 dBm  → Aceptable
-< -120 dBm  → Pobre
-```
-
-### SNR (Relación Señal-Ruido)
-Mide la diferencia entre la potencia de señal y el ruido en dB:
-- **SNR > 10 dB**: Excelente (bajo ruido)
-- **SNR 5-10 dB**: Aceptable
-- **SNR < 5 dB**: Pobre (señal interferida)
-
----
-
-## Configuración
-
-### 1. Hardware
-Asegurate que tienes:
-- LilyGO T-Beam v1.2 (no v1.1)
-- Display OLED 0.96" I2C (dirección 0x3C)
-- Cable USB para programación y depuración
-
-### 2. Software - Instalación
-
-#### Opción A: PlatformIO (Recomendado)
-```bash
-# Clonar o descargar el proyecto
-cd "Probar cobertura"
-
-# Compilar
-pio run -e lilygo-t-beam
-
-# Cargar firmware
-pio run -e lilygo-t-beam -t upload
-
-# Monitorear serial
-pio device monitor -e lilygo-t-beam -b 115200
-```
-
-#### Opción B: Arduino IDE
-1. Instalar placa ESP32: Gestor de tarjetas → buscar "esp32"
-2. Instalar librerías:
-   - Adafruit SSD1306
-   - Adafruit GFX Library
-   - ArduinoJson
-   - LMIC-Arduino
-3. Cargar `main.ino`
-4. Compilar y descargar
-
-### 3. Configuración de Nodos Autorizados
-
-En [include/config.h](include/config.h), actualizar:
-
-```cpp
-#define AUTHORIZED_NODES {                              \
-    {0xCC, 0xFC, 0x06, 0xD0, 0x7E, 0xD5, 0xB3, 0x70}, \
-    {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11}, \
-    /* Agregar más DevEUI en formato little-endian */ \
-}
-#define AUTHORIZED_NODES_COUNT 2
-```
-
-**Nota**: Los DevEUI deben estar en formato **little-endian** (menos significativo primero). Si tu nodo usa `70 B3 D5 7E D0 06 FC CC`, invierte el orden en la configuración.
-
----
-
-## Uso
-
-### Flujo Básico
-
-1. **Encender el T-Beam**
-   - Se muestra splash screen (3 segundos)
-   - Display muestra "Status: READY"
-
-2. **Presionar el Botón**
-   - Se inicia la prueba de cobertura
-   - Display muestra "Status: TESTING..."
-
-3. **Esperar Resultado**
-   - El dispositivo transmite un paquete LoRa
-   - Captura métricas de la transmisión
-   - Display muestra:
-     - **RSSI**: Potencia recibida
-     - **SNR**: Relación señal-ruido
-     - **Packets**: Contador de paquetes
-     - **Calidad**: Interpretación visual
-
-4. **Nuevas Pruebas**
-   - Presionar botón nuevamente para repetir
+Presionar el botón para repetir la prueba.
 
 ### Depuración Serial
 
@@ -223,7 +48,7 @@ Spreading Factor: 12
 Sistema listo para pruebas de cobertura
 
 === Iniciando prueba de cobertura LoRa ===
-Paquete transmitido, esperando resultado...
+Paquete transmitido (confirmed), esperando ACK/downlink...
 
 === Resultados de Cobertura ===
 RSSI: -95 dBm
@@ -262,29 +87,25 @@ Packets: 1
 - Promedio en operación: ~100-150 mA
 
 ---
-
-## Mapa Mental de la Comunicación
+## Mapa mental de la comunicación
 
 ```
-Dispositivo T-Beam                    Nodos/Gateway
-──────────────────────────────────────────────────
-
-[Button Press]
-    ↓
-[LoRaManager::startCoverageTest()]
-    ↓
-[LMIC transmite paquete "TEST" en SF12]  ──→ (Transmisión LoRa)
-    ↓
-[LMIC captura RSSI y SNR]
-    ↓
-[isNodeAuthorized()?]
-    ├─ Sí → Display muestra resultados
-    └─ No → Paquete ignorado
-    ↓
-[DisplayManager::showResults()]
+┌────────────┐      ┌─────────────┐      ┌─────────────┐
+│  Usuario   │      │   T-Beam    │      │   Gateway   │
+└─────┬──────┘      └─────┬───────┘      └─────┬───────┘
+    │  (pulsa botón)     │                  │
+    │───────────────────▶│                  │
+    │                    │-- uplink confirmado -->│
+    │                    │                  │
+    │                    │<-- downlink/ACK --│
+    │                    │                  │
+    │                    │-- mide RSSI/SNR --│
+    │                    │                  │
+    │                    │-- solo si recibe ACK/downlink, la medición se considera válida --│
+    │                    │                  │
+    │                    │-- muestra resultados en OLED/serial --▶│
+    │◀───────────────────│                  │
 ```
-
----
 
 ## Troubleshooting
 
@@ -315,11 +136,9 @@ Dispositivo T-Beam                    Nodos/Gateway
 ## Seguridad y Privacidad
 
 **Nota Importante**: 
-- Este dispositivo **solo mide cobertura**, no se conecta a TTN
-- Los DevEUI autorizados actúan como **filtro local**
-- No se transmiten datos personales
-- El dispositivo no se autentica contra servidores
-- Úsalo responsablemente en la banda ISM 868 MHz
+- Las mediciones se consideran válidas solo si el gateway confirma recepción (ACK o downlink).
+- No se transmiten datos personales por diseño.
+- Respeta las políticas del servidor/gateway y el duty-cycle de la banda ISM 868 MHz.
 
 ---
 
@@ -341,8 +160,6 @@ Este proyecto está disponible bajo licencia MIT. Ver LICENSE para detalles.
 ## Autor
 
 Proyecto desarrollado como herramienta de diagnóstico y validación de cobertura LoRa en redes locales.
-
-**Última actualización**: 16 de febrero de 2026
 
 ---
 
