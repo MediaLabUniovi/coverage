@@ -40,6 +40,10 @@ State currentState = STATE_SPLASH;
 unsigned long splashTimer = 0;
 unsigned long testTimer = 0;
 
+// ✅ Mantener resultados en pantalla X ms
+unsigned long resultsTimer = 0;
+const unsigned long RESULTS_HOLD_MS = 10000; // 10s
+
 // ==================== ISR ====================
 void IRAM_ATTR buttonISR() {
   unsigned long now = millis();
@@ -76,7 +80,6 @@ static bool wifiConnectWithManager() {
 // ==================== SETUP ====================
 void setup() {
   Serial.begin(115200);
-
 
   WiFi.mode(WIFI_STA);          // para poder leer MAC STA
   g_mac = WiFi.macAddress();
@@ -152,23 +155,25 @@ void loop() {
         Serial.println("Prueba iniciada...");
       }
 
-      // Pulsación larga => subir CSV (AQUÍ SÍ SE VERIFICA WIFI)
+      // Pulsación larga => subir CSV (verifica WiFi)
       if (longPress) {
         Serial.println("LONG PRESS -> Upload CSV");
         Serial.println("Conectando WiFi (WiFiManager)...");
-
+       display.showStatus2("UPLOAD", "Conectando WiFi...");
         display.showTesting(); // si quieres luego hacemos un showUploading()
 
         if (!wifiConnectWithManager()) {
           display.showError("WiFi FAIL");
           break;
         }
-
+         display.showStatus2("Conectado", "Subiendo cov.csv...");
         Serial.println("Subiendo /cov.csv...");
         bool ok = uploader.uploadCSV();
 
         if (ok) {
+          display.showStatus2("UPLOAD OK", "CSV enviado");
           Serial.println("UPLOAD OK");
+          delay(4000);
           display.showReady();
         } else {
           Serial.println("UPLOAD FAIL");
@@ -179,6 +184,10 @@ void loop() {
 
     case STATE_TESTING: {
       if (loraManager.isTestingComplete()) {
+
+        // ✅ Entramos en RESULTS y mantenemos pantalla 10s
+        buttonPressed = false;        // evita salida inmediata por ISR previa
+        resultsTimer = millis();      // arranca contador de hold
         currentState = STATE_RESULTS;
 
         LoRaTestResults results = loraManager.getResults();
@@ -230,6 +239,8 @@ void loop() {
 
       // Timeout
       if (millis() - testTimer > 30000) {
+        buttonPressed = false;
+        resultsTimer = millis();
         currentState = STATE_RESULTS;
         Serial.println("Timeout en la prueba");
         display.showError("Test Timeout");
@@ -238,7 +249,15 @@ void loop() {
     }
 
     case STATE_RESULTS:
-      // aquí NO se sube nada. Solo volver a READY.
+      // ✅ Mantener resultados en pantalla 10s, luego volver solo
+      if (millis() - resultsTimer > RESULTS_HOLD_MS) {
+        loraManager.resetTest();
+        currentState = STATE_READY;
+        display.showReady();
+        Serial.println("\nListo para nueva prueba (auto)");
+      }
+
+      // O volver antes si pulsas
       if (buttonPressed) {
         buttonPressed = false;
         loraManager.resetTest();

@@ -18,6 +18,9 @@ public:
     void showError(const char* error);
     void clear();
     void display_update() { display.display(); }
+    void showStatus2(const char* line1, const char* line2);
 };
+
+
 
 #endif

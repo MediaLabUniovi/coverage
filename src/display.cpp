@@ -62,6 +62,15 @@ void DisplayManager::showTesting() {
     display.display();
 }
 
+void DisplayManager::showStatus2(const char* line1, const char* line2) {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println(line1);
+  display.println(line2);
+  display.display();
+}
+
 void DisplayManager::showResults(int rssi, float snr, int packetCount,  bool fixValid, double lon, double lat, const char* dateStr, const char* mac) {
     display.clearDisplay();
     display.setTextSize(1);
