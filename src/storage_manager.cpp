@@ -50,8 +50,3 @@ void StorageManager::resetFile() {
     f.close();
   }
 }
-
-
-
-
-

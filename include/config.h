@@ -9,10 +9,14 @@
 #define UP_PORT 443
 #define UP_PATH "/bike_signal/upload.php"
 
+
+#define BATTERY_PIN 35
+
 // T-Beam GPIO Configuration (from utilities.h)
 #define BUTTON_PIN 38            // Botón incorporado del T-Beam
 #define I2C_SDA 21               // SDA para I2C
 #define I2C_SCL 22               // SCL para I2C
+#define SCREEN_ADDRESS 0x3C
 
 // Display OLED 0.96" Configuration
 #define SCREEN_WIDTH 128         // Ancho del display en pixels
@@ -65,5 +69,3 @@
 #define AUTHORIZED_NODES_COUNT 1
 
 #endif
-
-

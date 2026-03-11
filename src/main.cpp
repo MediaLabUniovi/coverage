@@ -8,11 +8,14 @@
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include "LongPress.h"
+#include "battery_manager.h"
+#include <Wire.h>
 
 String g_mac;
 
 // Display Manager
 DisplayManager display(I2C_SDA, I2C_SCL, SCREEN_ADDRESS);
+BatteryManager batteryManager;
 
 LongPressConfig lpCfg = {
   .buttonPin = BUTTON_PIN,
@@ -40,9 +43,11 @@ State currentState = STATE_SPLASH;
 unsigned long splashTimer = 0;
 unsigned long testTimer = 0;
 
-// ✅ Mantener resultados en pantalla X ms
+// Mantener resultados en pantalla X ms
 unsigned long resultsTimer = 0;
 const unsigned long RESULTS_HOLD_MS = 10000; // 10s
+unsigned long batteryUiTimer = 0;
+const unsigned long BATTERY_UI_REFRESH_MS = 3000;
 
 // ==================== ISR ====================
 void IRAM_ATTR buttonISR() {
@@ -81,7 +86,7 @@ static bool wifiConnectWithManager() {
 void setup() {
   Serial.begin(115200);
 
-  WiFi.mode(WIFI_STA);          // para poder leer MAC STA
+  WiFi.mode(WIFI_STA);
   g_mac = WiFi.macAddress();
   Serial.print("MAC (STA): ");
   Serial.println(g_mac);
@@ -91,10 +96,17 @@ void setup() {
 
   Serial.println("\n\n==== LoRa Coverage Test - T-Beam ====\n");
 
-  // Botón
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
   Serial.println("Botón inicializado en GPIO " + String(BUTTON_PIN));
+
+  // I2C una sola vez
+  Wire.begin(I2C_SDA, I2C_SCL);
+
+  // PMU / batería
+  if (!batteryManager.begin()) {
+    Serial.println("WARN: no se pudo inicializar lectura de bateria");
+  }
 
   // Display
   if (!display.init()) {
@@ -140,16 +152,42 @@ void loop() {
     case STATE_SPLASH:
       if (millis() - splashTimer > 3000) {
         currentState = STATE_READY;
-        display.showReady();
+
+        batteryManager.update(true);
+        display.showReady(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
+        batteryUiTimer = millis();
+
         Serial.println("Esperando presión de botón...");
       }
       break;
 
     case STATE_READY:
+      batteryManager.update();
+
+      if (millis() - batteryUiTimer > BATTERY_UI_REFRESH_MS) {
+        display.showReady(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
+        batteryUiTimer = millis();
+      }
+
       // Pulsación corta => medir
       if (shortPress) {
         currentState = STATE_TESTING;
-        display.showTesting();
+
+        batteryManager.update(true);
+        display.showTesting(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
+
         loraManager.startCoverageTest();
         testTimer = millis();
         Serial.println("Prueba iniciada...");
@@ -159,14 +197,19 @@ void loop() {
       if (longPress) {
         Serial.println("LONG PRESS -> Upload CSV");
         Serial.println("Conectando WiFi (WiFiManager)...");
-       display.showStatus2("UPLOAD", "Conectando WiFi...");
-        display.showTesting(); // si quieres luego hacemos un showUploading()
+        display.showStatus2("UPLOAD", "Conectando WiFi...");
+        display.showTesting(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
 
         if (!wifiConnectWithManager()) {
           display.showError("WiFi FAIL");
           break;
         }
-         display.showStatus2("Conectado", "Subiendo cov.csv...");
+
+        display.showStatus2("Conectado", "Subiendo cov.csv...");
         Serial.println("Subiendo /cov.csv...");
         bool ok = uploader.uploadCSV();
 
@@ -174,7 +217,15 @@ void loop() {
           display.showStatus2("UPLOAD OK", "CSV enviado");
           Serial.println("UPLOAD OK");
           delay(4000);
-          display.showReady();
+
+          batteryManager.update(true);
+          display.showReady(
+            batteryManager.getVoltage(),
+            batteryManager.getPercent(),
+            batteryManager.isCharging()
+          );
+          batteryUiTimer = millis();
+
         } else {
           Serial.println("UPLOAD FAIL");
           display.showError("UPLOAD FAIL");
@@ -185,9 +236,8 @@ void loop() {
     case STATE_TESTING: {
       if (loraManager.isTestingComplete()) {
 
-        // ✅ Entramos en RESULTS y mantenemos pantalla 10s
-        buttonPressed = false;        // evita salida inmediata por ISR previa
-        resultsTimer = millis();      // arranca contador de hold
+        buttonPressed = false;
+        resultsTimer = millis();
         currentState = STATE_RESULTS;
 
         LoRaTestResults results = loraManager.getResults();
@@ -203,18 +253,20 @@ void loop() {
           snprintf(dateStr, sizeof(dateStr), "DATE: NO GPS TIME");
         }
 
+        int rssiToStore = results.gotDownlink ? results.rssi : 0;
+        float snrToStore = results.gotDownlink ? results.snr : 0.0f;
+
         if (!results.gotDownlink) {
-          display.showError("NO ACK");
-          Serial.println("Sin ACK/downlink => no hay dB reales en el nodo");
-        } else {
-          display.showResults(results.rssi, results.snr, results.packetCount,
-                              fix.valid, fix.lon, fix.lat,
-                              dateStr, g_mac.c_str());
+          Serial.println("Sin ACK/downlink -> se guardan RSSI=0 y SNR=0");
         }
 
+        display.showResults(rssiToStore, snrToStore, results.packetCount,
+                            fix.valid, fix.lon, fix.lat,
+                            dateStr, g_mac.c_str());
+
         Serial.println("\nResultados de cobertura:");
-        Serial.print("  RSSI: "); Serial.print(results.rssi); Serial.println(" dBm");
-        Serial.print("  SNR:  "); Serial.println(results.snr);
+        Serial.print("  RSSI: "); Serial.print(rssiToStore); Serial.println(" dBm");
+        Serial.print("  SNR:  "); Serial.println(snrToStore);
         Serial.print("  MAC:  "); Serial.println(g_mac);
         Serial.print("  T:    "); Serial.println(dateStr);
 
@@ -225,15 +277,15 @@ void loop() {
           Serial.println("  GPS: NO FIX");
         }
 
-        // Guardado
-        if (results.gotDownlink && fix.valid && fix.timeValid) {
+        // Guardado: ahora se guarda aunque no haya ACK, usando 0/0
+        if (fix.valid && fix.timeValid) {
           if (!storageManager.appendPoint(fix.lon, fix.lat, dateStr,
-                                          results.rssi, results.snr,
+                                          rssiToStore, snrToStore,
                                           g_mac.c_str())) {
             Serial.println("ERROR: no se pudo guardar en LittleFS");
           }
         } else {
-          Serial.println("No guardo punto: falta ACK o GPS/fecha");
+          Serial.println("No guardo punto: falta GPS o fecha");
         }
       }
 
@@ -242,18 +294,51 @@ void loop() {
         buttonPressed = false;
         resultsTimer = millis();
         currentState = STATE_RESULTS;
-        Serial.println("Timeout en la prueba");
-        display.showError("Test Timeout");
+
+        Serial.println("Timeout en la prueba -> se guardan RSSI=0 y SNR=0");
+
+        GpsFix fix = gpsManager.getFix();
+
+        char dateStr[24];
+        if (fix.timeValid) {
+          snprintf(dateStr, sizeof(dateStr),
+                   "%04u-%02u-%02u %02u:%02u:%02u",
+                   fix.year, fix.month, fix.day,
+                   fix.hour, fix.minute, fix.second);
+        } else {
+          snprintf(dateStr, sizeof(dateStr), "DATE: NO GPS TIME");
+        }
+
+        display.showResults(0, 0.0f, 0,
+                            fix.valid, fix.lon, fix.lat,
+                            dateStr, g_mac.c_str());
+
+        if (fix.valid && fix.timeValid) {
+          if (!storageManager.appendPoint(fix.lon, fix.lat, dateStr,
+                                          0, 0.0f,
+                                          g_mac.c_str())) {
+            Serial.println("ERROR: no se pudo guardar en LittleFS");
+          }
+        } else {
+          Serial.println("No guardo punto de timeout: falta GPS o fecha");
+        }
       }
       break;
     }
 
     case STATE_RESULTS:
-      // ✅ Mantener resultados en pantalla 10s, luego volver solo
       if (millis() - resultsTimer > RESULTS_HOLD_MS) {
         loraManager.resetTest();
         currentState = STATE_READY;
-        display.showReady();
+
+        batteryManager.update(true);
+        display.showReady(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
+        batteryUiTimer = millis();
+
         Serial.println("\nListo para nueva prueba (auto)");
       }
 
@@ -262,7 +347,15 @@ void loop() {
         buttonPressed = false;
         loraManager.resetTest();
         currentState = STATE_READY;
-        display.showReady();
+
+        batteryManager.update(true);
+        display.showReady(
+          batteryManager.getVoltage(),
+          batteryManager.getPercent(),
+          batteryManager.isCharging()
+        );
+        batteryUiTimer = millis();
+
         Serial.println("\nListo para nueva prueba");
       }
       break;
