@@ -30,34 +30,22 @@ static int lastSundayOfMonth(int y, int m) {
 // - Empieza: último domingo de marzo a las 01:00 UTC
 // - Termina: último domingo de octubre a las 01:00 UTC
 static bool isDST_EuropeMadrid_UTC(int y, int mo, int d, int h, int mi, int s) {
+  if (mo < 3 || mo > 10) return false;
+  if (mo > 3 && mo < 10) return true;
+
   int startDay = lastSundayOfMonth(y, 3);
   int endDay   = lastSundayOfMonth(y, 10);
 
-  // Antes de marzo o después de octubre => no DST
-  if (mo < 3 || mo > 10) return false;
-  // Entre abril y septiembre => DST
-  if (mo > 3 && mo < 10) return true;
-
-  // Marzo: DST a partir del último domingo 01:00 UTC
   if (mo == 3) {
     if (d > startDay) return true;
     if (d < startDay) return false;
-    // d == startDay
-    if (h > 1) return true;
-    if (h < 1) return false;
-    // h==1: a partir de 01:00:00
-    return (mi > 0 || s >= 0);
+    return (h > 1 || (h == 1 && (mi > 0 || s >= 0)));
   }
 
-  // Octubre: DST hasta el último domingo 01:00 UTC (excluido)
   if (mo == 10) {
     if (d < endDay) return true;
     if (d > endDay) return false;
-    // d == endDay
-    if (h < 1) return true;
-    if (h > 1) return false;
-    // h==1: en 01:00 UTC ya cambió a estándar => no DST
-    return false;
+    return (h < 1);
   }
 
   return false;

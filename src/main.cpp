@@ -1,17 +1,27 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiManager.h>
+#include <Wire.h>
 #include "config.h"
 #include "display.h"
 #include "lora_manager.h"
 #include "gps_manager.h"
 #include "storage_manager.h"
 #include "uploader.h"
-#include <WiFi.h>
-#include <WiFiManager.h>
 #include "LongPress.h"
 #include "battery_manager.h"
-#include <Wire.h>
 
-String g_mac;
+// Constants
+const unsigned long SPLASH_TIMEOUT_MS = 3000;
+const unsigned long TEST_TIMEOUT_MS = 30000;
+const unsigned long UPLOAD_MSG_DELAY_MS = 4000;
+const int WIFI_MANAGER_PORTAL_TIMEOUT_SEC = 180;
+const int WIFI_MANAGER_CONNECT_TIMEOUT_SEC = 20;
+
+char g_mac[18];
+
+// Function declarations
+void saveAndShowResults(LoRaTestResults results, bool success);
 
 // Display Manager
 DisplayManager display(I2C_SDA, I2C_SCL, SCREEN_ADDRESS);
@@ -26,8 +36,7 @@ LongPressConfig lpCfg = {
 
 LongPressState lpState;
 
-// Button state (para volver desde RESULTS)
-volatile bool buttonPressed = false;
+volatile bool buttonPressed = false; // Used if we still need a global flag, though shortPress replaces most of its usage
 unsigned long lastButtonPress = 0;
 const unsigned long DEBOUNCE_TIME = 200;  // ms
 
@@ -36,7 +45,8 @@ enum State {
   STATE_SPLASH,
   STATE_READY,
   STATE_TESTING,
-  STATE_RESULTS
+  STATE_RESULTS,
+  STATE_UPLOADING
 };
 
 State currentState = STATE_SPLASH;
@@ -50,13 +60,7 @@ unsigned long batteryUiTimer = 0;
 const unsigned long BATTERY_UI_REFRESH_MS = 3000;
 
 // ==================== ISR ====================
-void IRAM_ATTR buttonISR() {
-  unsigned long now = millis();
-  if (now - lastButtonPress > DEBOUNCE_TIME) {
-    buttonPressed = true;
-    lastButtonPress = now;
-  }
-}
+// ISR eliminada a favor de checkLongPress en el loop
 
 // ==================== WiFi Manager ====================
 static bool wifiConnectWithManager() {
@@ -64,8 +68,8 @@ static bool wifiConnectWithManager() {
 
   WiFiManager wm;
 
-  wm.setConfigPortalTimeout(180); // 3 min
-  wm.setConnectTimeout(20);
+  wm.setConfigPortalTimeout(WIFI_MANAGER_PORTAL_TIMEOUT_SEC);
+  wm.setConnectTimeout(WIFI_MANAGER_CONNECT_TIMEOUT_SEC);
 
   // AP si no hay credenciales guardadas:
   // SSID: TBEAM-COV
@@ -87,7 +91,9 @@ void setup() {
   Serial.begin(115200);
 
   WiFi.mode(WIFI_STA);
-  g_mac = WiFi.macAddress();
+  String macTemplate = WiFi.macAddress();
+  strncpy(g_mac, macTemplate.c_str(), sizeof(g_mac));
+  g_mac[sizeof(g_mac) - 1] = '\0';
   Serial.print("MAC (STA): ");
   Serial.println(g_mac);
 
@@ -97,7 +103,6 @@ void setup() {
   Serial.println("\n\n==== LoRa Coverage Test - T-Beam ====\n");
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
   Serial.println("Botón inicializado en GPIO " + String(BUTTON_PIN));
 
   // I2C una sola vez
@@ -111,14 +116,16 @@ void setup() {
   // Display
   if (!display.init()) {
     Serial.println("FATAL: No se pudo inicializar el display");
-    while (1) delay(100);
+    delay(5000);
+    ESP.restart();
   }
 
   // LittleFS
   if (!storageManager.begin()) {
     Serial.println("FATAL: LittleFS no inicia");
     display.showError("LittleFS FAIL");
-    while (1) delay(100);
+    delay(5000);
+    ESP.restart();
   }
 
   // Splash
@@ -129,10 +136,62 @@ void setup() {
   if (!loraManager.init()) {
     Serial.println("FATAL: No se pudo inicializar LoRa");
     display.showError("LoRa Init Failed");
-    while (1) delay(100);
+    delay(5000);
+    ESP.restart();
   }
 
   Serial.println("Sistema listo para pruebas de cobertura\n");
+}
+
+void saveAndShowResults(LoRaTestResults results, bool success) {
+  GpsFix fix = gpsManager.getFix();
+
+  char dateStr[24];
+  if (fix.timeValid) {
+    snprintf(dateStr, sizeof(dateStr),
+             "%04u-%02u-%02u %02u:%02u:%02u",
+             fix.year, fix.month, fix.day,
+             fix.hour, fix.minute, fix.second);
+  } else {
+    snprintf(dateStr, sizeof(dateStr), "DATE: NO GPS TIME");
+  }
+
+  int rssiToStore = success && results.gotDownlink ? results.rssi : 0;
+  float snrToStore = success && results.gotDownlink ? results.snr : 0.0f;
+  uint8_t packetCount = success ? results.packetCount : 0;
+
+  if (!success) {
+    Serial.println("Timeout en la prueba -> se guardan RSSI=0 y SNR=0");
+  } else if (!results.gotDownlink) {
+    Serial.println("Sin ACK/downlink -> se guardan RSSI=0 y SNR=0");
+  }
+
+  display.showResults(rssiToStore, snrToStore, packetCount,
+                      fix.valid, fix.lon, fix.lat,
+                      dateStr, g_mac);
+
+  Serial.println("\nResultados de cobertura:");
+  Serial.print("  RSSI: "); Serial.print(rssiToStore); Serial.println(" dBm");
+  Serial.print("  SNR:  "); Serial.println(snrToStore);
+  Serial.print("  MAC:  "); Serial.println(g_mac);
+  Serial.print("  T:    "); Serial.println(dateStr);
+
+  if (fix.valid) {
+    Serial.print("  LAT: "); Serial.println(fix.lat, 6);
+    Serial.print("  LON: "); Serial.println(fix.lon, 6);
+  } else {
+    Serial.println("  GPS: NO FIX");
+  }
+
+  if (fix.valid && fix.timeValid) {
+    if (!storageManager.appendPoint(fix.lon, fix.lat, dateStr,
+                                    rssiToStore, snrToStore,
+                                    g_mac)) {
+      Serial.println("ERROR: no se pudo guardar en LittleFS");
+    }
+  } else {
+    Serial.println("No guardo punto: falta GPS o fecha");
+  }
 }
 
 // ==================== LOOP ====================
@@ -150,7 +209,7 @@ void loop() {
   switch (currentState) {
 
     case STATE_SPLASH:
-      if (millis() - splashTimer > 3000) {
+      if (millis() - splashTimer > SPLASH_TIMEOUT_MS) {
         currentState = STATE_READY;
 
         batteryManager.update(true);
@@ -206,32 +265,44 @@ void loop() {
 
         if (!wifiConnectWithManager()) {
           display.showError("WiFi FAIL");
+          WiFi.mode(WIFI_OFF);
           break;
         }
 
-        display.showStatus2("Conectado", "Subiendo cov.csv...");
-        Serial.println("Subiendo /cov.csv...");
-        bool ok = uploader.uploadCSV();
-
-        if (ok) {
-          display.showStatus2("UPLOAD OK", "CSV enviado");
-          Serial.println("UPLOAD OK");
-          delay(4000);
-
-          batteryManager.update(true);
-          display.showReady(
-            batteryManager.getVoltage(),
-            batteryManager.getPercent(),
-            batteryManager.isCharging()
-          );
-          batteryUiTimer = millis();
-
-        } else {
-          Serial.println("UPLOAD FAIL");
-          display.showError("UPLOAD FAIL");
-        }
+        currentState = STATE_UPLOADING;
       }
       break;
+
+    case STATE_UPLOADING: {
+      display.showStatus2("Conectado", "Subiendo cov.csv...");
+      Serial.println("Subiendo /cov.csv...");
+      bool ok = uploader.uploadCSV();
+
+      if (ok) {
+        display.showStatus2("UPLOAD OK", "CSV enviado");
+        Serial.println("UPLOAD OK");
+        delay(UPLOAD_MSG_DELAY_MS); // Dar un momento para que el usuario lo lea antes de volver a READY
+      } else {
+        Serial.println("UPLOAD FAIL");
+        display.showError("UPLOAD FAIL");
+        delay(UPLOAD_MSG_DELAY_MS);
+      }
+
+      // Apagamos la radio para ahorrar batería
+      WiFi.mode(WIFI_OFF);
+      
+      currentState = STATE_READY;
+
+      batteryManager.update(true);
+      display.showReady(
+        batteryManager.getVoltage(),
+        batteryManager.getPercent(),
+        batteryManager.isCharging()
+      );
+      batteryUiTimer = millis();
+
+      break;
+    }
 
     case STATE_TESTING: {
       if (loraManager.isTestingComplete()) {
@@ -241,87 +312,17 @@ void loop() {
         currentState = STATE_RESULTS;
 
         LoRaTestResults results = loraManager.getResults();
-        GpsFix fix = gpsManager.getFix();
-
-        char dateStr[24];
-        if (fix.timeValid) {
-          snprintf(dateStr, sizeof(dateStr),
-                   "%04u-%02u-%02u %02u:%02u:%02u",
-                   fix.year, fix.month, fix.day,
-                   fix.hour, fix.minute, fix.second);
-        } else {
-          snprintf(dateStr, sizeof(dateStr), "DATE: NO GPS TIME");
-        }
-
-        int rssiToStore = results.gotDownlink ? results.rssi : 0;
-        float snrToStore = results.gotDownlink ? results.snr : 0.0f;
-
-        if (!results.gotDownlink) {
-          Serial.println("Sin ACK/downlink -> se guardan RSSI=0 y SNR=0");
-        }
-
-        display.showResults(rssiToStore, snrToStore, results.packetCount,
-                            fix.valid, fix.lon, fix.lat,
-                            dateStr, g_mac.c_str());
-
-        Serial.println("\nResultados de cobertura:");
-        Serial.print("  RSSI: "); Serial.print(rssiToStore); Serial.println(" dBm");
-        Serial.print("  SNR:  "); Serial.println(snrToStore);
-        Serial.print("  MAC:  "); Serial.println(g_mac);
-        Serial.print("  T:    "); Serial.println(dateStr);
-
-        if (fix.valid) {
-          Serial.print("  LAT: "); Serial.println(fix.lat, 6);
-          Serial.print("  LON: "); Serial.println(fix.lon, 6);
-        } else {
-          Serial.println("  GPS: NO FIX");
-        }
-
-        // Guardado: ahora se guarda aunque no haya ACK, usando 0/0
-        if (fix.valid && fix.timeValid) {
-          if (!storageManager.appendPoint(fix.lon, fix.lat, dateStr,
-                                          rssiToStore, snrToStore,
-                                          g_mac.c_str())) {
-            Serial.println("ERROR: no se pudo guardar en LittleFS");
-          }
-        } else {
-          Serial.println("No guardo punto: falta GPS o fecha");
-        }
+        saveAndShowResults(results, true);
       }
 
       // Timeout
-      if (millis() - testTimer > 30000) {
+      if (millis() - testTimer > TEST_TIMEOUT_MS) {
         buttonPressed = false;
         resultsTimer = millis();
         currentState = STATE_RESULTS;
 
-        Serial.println("Timeout en la prueba -> se guardan RSSI=0 y SNR=0");
-
-        GpsFix fix = gpsManager.getFix();
-
-        char dateStr[24];
-        if (fix.timeValid) {
-          snprintf(dateStr, sizeof(dateStr),
-                   "%04u-%02u-%02u %02u:%02u:%02u",
-                   fix.year, fix.month, fix.day,
-                   fix.hour, fix.minute, fix.second);
-        } else {
-          snprintf(dateStr, sizeof(dateStr), "DATE: NO GPS TIME");
-        }
-
-        display.showResults(0, 0.0f, 0,
-                            fix.valid, fix.lon, fix.lat,
-                            dateStr, g_mac.c_str());
-
-        if (fix.valid && fix.timeValid) {
-          if (!storageManager.appendPoint(fix.lon, fix.lat, dateStr,
-                                          0, 0.0f,
-                                          g_mac.c_str())) {
-            Serial.println("ERROR: no se pudo guardar en LittleFS");
-          }
-        } else {
-          Serial.println("No guardo punto de timeout: falta GPS o fecha");
-        }
+        LoRaTestResults dummyResults;
+        saveAndShowResults(dummyResults, false);
       }
       break;
     }
@@ -343,7 +344,7 @@ void loop() {
       }
 
       // O volver antes si pulsas
-      if (buttonPressed) {
+      if (shortPress) {
         buttonPressed = false;
         loraManager.resetTest();
         currentState = STATE_READY;

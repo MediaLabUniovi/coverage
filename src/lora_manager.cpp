@@ -135,11 +135,6 @@ LMIC.dn2Dr = DR_SF9;                           // RX2 típico TTN EU868
     // Set data rate y transmit power para coverage test
     LMIC_setDrTxpow(DR_SF12, 14);
     
-    // Desactivar todos los canales excepto el 0
-   // for (int channel = 1; channel < 72; ++channel) {
-     //   LMIC_disableChannel(channel);
-    //}
-    
     // Desactivar link check
     LMIC_setLinkCheckMode(0);
     

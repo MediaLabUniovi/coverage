@@ -92,13 +92,22 @@ bool Uploader::uploadCSV() {   // <- definición (tiene que coincidir con .h)
     return false;
   }
 
-  String status = client.readStringUntil('\n');
-  Serial.println(status);
+  // Leer la primera linea entera para parsear el codigo de estado HTTP (aprox 15-20 bytes)
+  char statusLine[64] = {0};
+  int idx = 0;
+  while (client.available() && idx < (sizeof(statusLine) - 1)) {
+    char c = client.read();
+    statusLine[idx++] = c;
+    if (c == '\n') break;
+  }
+  Serial.print(statusLine);
 
+  // Descartar el resto de la respuesta del servidor bloque a bloque para no saturar memoria
+  uint8_t discardBuf[128];
   while (client.available()) {
-    Serial.println(client.readStringUntil('\n'));
+    client.read(discardBuf, sizeof(discardBuf));
   }
 
   client.stop();
-  return status.startsWith("HTTP/1.1 200");
+  return (strncmp(statusLine, "HTTP/1.1 200", 12) == 0);
 }

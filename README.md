@@ -12,6 +12,20 @@ La medición de cobertura **solo se considera válida si el gateway responde con
 - Pulsa el botón del T‑Beam para iniciar una prueba.
 - Observa resultados en el OLED y en el puerto serial (115200 baud).
 
+## Metodología de Guardado de Datos (Flujo de Cobertura)
+
+El firmware protege la integridad del archivo de datos (`cov.csv`) aplicando un filtro estricto sobre el módulo GPS antes de guardar cualquier medición. El flujo de una medición es el siguiente:
+
+1. **Fin de Prueba LoRa**: Cuando el T-Beam termina de transmitir/recibir o se acaba el tiempo de espera (*timeout*), se solicita el estado actual del GPS.
+2. **Visualización Continua**: Los resultados (con o sin GPS) siempre se imprimen en la pantalla OLED para darle _feedback_ en tiempo real al usuario.
+3. **Filtro de Guardado (Protección GPS)**: El sistema verifica dos condiciones críticas:
+   * **Fix Válido**: El GPS debe haber triangulado suficientes satélites para obtener Latitud y Longitud precisas.
+   * **Hora Válida**: El GPS debe tener la hora y fecha sincronizada.
+4. **Registro de Señal vs Zonas Muertas**:
+   * Si las condiciones del GPS **NO** se cumplen, la medición se **descarta** y no se guarda nada para evitar "puntos fantasma".
+   * Si las condiciones del GPS se cumplen y el gateway **responde (ACK/downlink)**, se guardan las coordenadas con los valores reales de RSSI y SNR.
+   * Si las condiciones del GPS se cumplen pero el gateway **NO responde** (no hay cobertura LoRa), el sistema **sí guarda la medición**, pero registra automáticamente un **0 para RSSI y SNR**. Esto es muy útil porque permite mapear las zonas oscuras o sin cobertura comprobada en territorio.
+
 ## Métricas de cobertura
 
 - RSSI: <-80 dBm excelente, <-100 dBm buena, <-120 dBm aceptable.
